@@ -30,13 +30,13 @@ type Scanner struct {
 	WasteCount     int64
 
 	// Sync
-	mu           sync.Mutex
-	wg           sync.WaitGroup
-	snapshotWg   sync.WaitGroup
-	cancelOnce   sync.Once
-	pwnedList    []ExploitResult
-	cancelChan   chan struct{}
-	interrupted  bool
+	mu          sync.Mutex
+	wg          sync.WaitGroup
+	snapshotWg  sync.WaitGroup
+	cancelOnce  sync.Once
+	pwnedList   []ExploitResult
+	cancelChan  chan struct{}
+	interrupted bool
 }
 
 func NewScanner(targets []string, config *Config, threads int, outDir string, inputSource string) *Scanner {
@@ -434,16 +434,16 @@ func (s *Scanner) processExploit(serial string, client *p2p.DHClient, tunnel *p2
 	if s.Config.Pwn.Protocol["sdk"] && s.Config.Pwn.Methods["brute"] {
 		res, err := TryBruteForceSDK(tunnel, s.Config.Brute.Credentials)
 		if err == nil && res != nil {
-				res.IP = ip
-				s.handlePwned(serial, res)
-				s.applyBranding(tunnel, serial, res)
-				s.applyAudioSettings(tunnel)
-				if !s.launchSnapshot(serial, res) {
-					s.mu.Lock()
-					s.CompletedCount++
-					s.mu.Unlock()
-				}
-				return
+			res.IP = ip
+			s.handlePwned(serial, res)
+			s.applyBranding(tunnel, serial, res)
+			s.applyAudioSettings(tunnel)
+			if !s.launchSnapshot(serial, res) {
+				s.mu.Lock()
+				s.CompletedCount++
+				s.mu.Unlock()
+			}
+			return
 		}
 	}
 

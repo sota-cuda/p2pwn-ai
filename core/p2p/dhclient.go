@@ -11,35 +11,41 @@ import (
 	"time"
 )
 
+// min returns the smaller of two integers (compatibility for Go < 1.21)
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 const (
 	MainServer = "www.easy4ipcloud.com:8800"
 	Version    = "5.0.0"
 )
 
-
-
 type DHClient struct {
-	serial        string
-	username      string
-	userkey       string
-	p2pServerAddr string
-	relayAddr     string
-	agentAddr     string
-	deviceLAddr   string
-	deviceRAddr   string
-	ptcpSession   *PTCPSession
+	serial            string
+	username          string
+	userkey           string
+	p2pServerAddr     string
+	relayAddr         string
+	agentAddr         string
+	deviceLAddr       string
+	deviceRAddr       string
+	ptcpSession       *PTCPSession
 	devicePTCPSession *PTCPSession // separate PTCP session for direct device path
-	cseq          int
-	lport         int
-	debug         bool
-	timeout       time.Duration
-	retries       int
+	cseq              int
+	lport             int
+	debug             bool
+	timeout           time.Duration
+	retries           int
 
 	// Connections
-	mainConn    *net.UDPConn  // main_remote
-	deviceConn  *net.UDPConn  // device_remote
+	mainConn   *net.UDPConn // main_remote
+	deviceConn *net.UDPConn // device_remote
 
-	sessionID string // HTTP session cookie from RPC2_Login
+	sessionID   string // HTTP session cookie from RPC2_Login
 	aid         []byte // random aid
 	sign        []byte // sign from relay
 	cameraLAddr string // camera local addr
@@ -816,4 +822,3 @@ func checkOnlineWith(serial string, timeout time.Duration, retries int) bool {
 
 	return resp.Code == 200
 }
-
