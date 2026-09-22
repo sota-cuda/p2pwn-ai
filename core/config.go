@@ -44,9 +44,9 @@ type BrandConfig struct {
 }
 
 type AudioConfig struct {
-	Enabled        bool `toml:"enabled"`
-	SpeakerVolume  int  `toml:"speaker_volume"`
-	MicVolume      int  `toml:"mic_volume"`
+	Enabled       bool `toml:"enabled"`
+	SpeakerVolume int  `toml:"speaker_volume"`
+	MicVolume     int  `toml:"mic_volume"`
 }
 
 type Config struct {
@@ -172,30 +172,25 @@ func LoadConfig(path string, isDefault bool) (*Config, error) {
 		return nil, fmt.Errorf("error in config on line %d", line)
 	}
 
-	
 	timeoutMs, err := getIntValue(conf.Scan.Timeout)
 	if err != nil || timeoutMs <= 0 {
 		return nil, fmt.Errorf("invalid timeout value in config")
 	}
 
-	
 	_, err = getIntValue(conf.Scan.Retries)
 	if err != nil {
 		return nil, fmt.Errorf("invalid retry value in config")
 	}
 
-	
 	if _, err := ParseGenerateRanges(conf.Scan.Generate); err != nil {
 		return nil, fmt.Errorf("invalid generate value in config: %s", err)
 	}
 
-	
 	nursesVal, err := getIntValue(conf.Scan.Nurses)
 	if err != nil || nursesVal <= 0 {
 		return nil, fmt.Errorf("invalid nurses value in config")
 	}
 
-	
 	hasProtocol := false
 	for _, enabled := range conf.Pwn.Protocol {
 		if enabled {
@@ -207,7 +202,6 @@ func LoadConfig(path string, isDefault bool) (*Config, error) {
 		return nil, fmt.Errorf("at least one protocol must be enabled in config")
 	}
 
-	
 	hasMethod := false
 	for _, enabled := range conf.Pwn.Methods {
 		if enabled {
@@ -219,25 +213,21 @@ func LoadConfig(path string, isDefault bool) (*Config, error) {
 		return nil, fmt.Errorf("at least one method must be enabled in config")
 	}
 
-	
 	alphanum := regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 	if len(conf.Dummy.Login) < 5 || len(conf.Dummy.Login) > 32 || !alphanum.MatchString(conf.Dummy.Login) {
 		return nil, fmt.Errorf("invalid dummy login format in config")
 	}
 
-	
 	if len(conf.Dummy.Password) < 8 || len(conf.Dummy.Password) > 32 || !alphanum.MatchString(conf.Dummy.Password) {
 		return nil, fmt.Errorf("invalid dummy password format in config")
 	}
 
-	
 	if conf.Brand.Enabled {
 		if len(conf.Brand.OverlayText) > 5 {
 			conf.Brand.OverlayText = conf.Brand.OverlayText[:5]
 		}
 	}
 
-	
 	if conf.Audio.Enabled {
 		if conf.Audio.SpeakerVolume < 0 || conf.Audio.SpeakerVolume > 100 {
 			return nil, fmt.Errorf("invalid speaker_volume in config (must be 0-100)")
