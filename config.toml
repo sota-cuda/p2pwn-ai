@@ -20,6 +20,7 @@ credentials = [
   { login = "888888", password = "888888" },
   { login = "admin", password = "admin123" },
   { login = "default", password = "tluafed" },
+  { login = "admin", password = "YOUR_PASSWORD_HERE" },
 ]
 
 [dummy] # Credentials for "dummy" account added via CVE
