@@ -1,29 +1,13 @@
 ```
-# Compiled and build artifacts
-*.o
-*.obj
-*.a
-*.so
-*.dll
-*.exe
-*.out
-
-# Dependencies
-vendor/
-*.mod
-*.sum
-
-# Logs and temp files
-*.log
+# Temp files and logs
 *.tmp
-*.swp
+*.log
 
-# Editors
-.vscode/
-.idea/
+# Generated files
+p2pwn_test
+sns.txt
+test_sn.txt
 
-# Environment
-.env
-.env.local
-*.env.*
+# Date-stamped directories
+22-09-2026_*/
 ```
