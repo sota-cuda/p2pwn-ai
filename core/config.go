@@ -30,6 +30,8 @@ type Credential struct {
 
 type BruteConfig struct {
 	Credentials []Credential `toml:"credentials"`
+	MaxAttempts int          `toml:"max_attempts"` // Maximum login attempts per device (0 = unlimited, but not recommended)
+	DelayMs     int          `toml:"delay_ms"`     // Delay between attempts in milliseconds to avoid lockout
 }
 
 type DummyConfig struct {
@@ -75,6 +77,8 @@ methods.cve-2021-33045 = true # CVE-2021-33045
 methods.cve-2024-39943 = true # CVE-2024-39943
 
 [brute] # Credentials brute force configuration
+max_attempts = 4 # Maximum login attempts per device (set to 4 or less to avoid account lockout on Dahua devices)
+delay_ms = 1000 # Delay between attempts in milliseconds (1000ms recommended to avoid triggering lockout)
 credentials = [
   { login = "admin", password = "admin" },
   { login = "666666", password = "666666" },

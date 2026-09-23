@@ -439,7 +439,7 @@ func (s *Scanner) processExploit(serial string, client *p2p.DHClient, tunnel *p2
 		}
 
 		if s.Config.Pwn.Methods["brute"] {
-			res, err := TryBruteForceWeb(tunnel, s.Config.Brute.Credentials)
+			res, err := TryBruteForceWeb(tunnel, s.Config.Brute.Credentials, s.Config.Brute.MaxAttempts, s.Config.Brute.DelayMs)
 			if err == nil && res != nil {
 				res.IP = ip
 				s.handlePwned(serial, res)
@@ -456,7 +456,7 @@ func (s *Scanner) processExploit(serial string, client *p2p.DHClient, tunnel *p2
 	}
 
 	if s.Config.Pwn.Protocol["sdk"] && s.Config.Pwn.Methods["brute"] {
-		res, err := TryBruteForceSDK(tunnel, s.Config.Brute.Credentials)
+		res, err := TryBruteForceSDK(tunnel, s.Config.Brute.Credentials, s.Config.Brute.MaxAttempts, s.Config.Brute.DelayMs)
 		if err == nil && res != nil {
 			res.IP = ip
 			s.handlePwned(serial, res)
