@@ -100,3 +100,11 @@ func BuildDeviceXMLRow(serial string, login string, encryptedPassword string) st
 	b := EscapeXML(encryptedPassword)
 	return "\t" + `<Device name="` + s + `" domain="` + s + `" port="37777" username="` + l + `" password="` + b + `" protocol="1" connect="19" />` + "\n"
 }
+
+func BuildDeviceXMLRowWithName(serial string, login string, encryptedPassword string, deviceName string) string {
+	s := EscapeXML(serial)
+	l := EscapeXML(login)
+	b := EscapeXML(encryptedPassword)
+	n := EscapeXML(deviceName)
+	return "\t" + `<Device name="` + n + `" domain="` + s + `" port="37777" username="` + l + `" password="` + b + `" protocol="1" connect="19" />` + "\n"
+}

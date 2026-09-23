@@ -20,6 +20,7 @@ type Scanner struct {
 	Threads     int
 	OutDir      string
 	InputSource string
+	Debug       bool
 
 	// Stats
 	TotalCount     int64
@@ -35,19 +36,20 @@ type Scanner struct {
 	snapshotWg  sync.WaitGroup
 	cancelOnce  sync.Once
 	pwnedList   []ExploitResult
-	onlineList  []string
+	onlineFile  *os.File
 	cancelChan  chan struct{}
 	interrupted bool
 	startTime   time.Time
 }
 
-func NewScanner(targets []string, config *Config, threads int, outDir string, inputSource string) *Scanner {
+func NewScanner(targets []string, config *Config, threads int, outDir string, inputSource string, debug bool) *Scanner {
 	return &Scanner{
 		Targets:     targets,
 		Config:      config,
 		Threads:     threads,
 		OutDir:      outDir,
 		InputSource: inputSource,
+		Debug:       debug,
 		cancelChan:  make(chan struct{}),
 		startTime:   time.Now(),
 	}
@@ -107,6 +109,14 @@ func (s *Scanner) Run() {
 
 	os.MkdirAll(s.OutDir, 0755)
 	s.writePwnedStart()
+	
+	// Open online.txt for appending as we find online SNs
+	onlinePath := filepath.Join(s.OutDir, "online.txt")
+	var openErr error
+	s.onlineFile, openErr = os.OpenFile(onlinePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if openErr != nil {
+		s.onlineFile = nil
+	}
 
 	type onlineResult struct {
 		serial string
@@ -163,7 +173,11 @@ func (s *Scanner) Run() {
 					}
 					s.mu.Lock()
 					s.OnlineCount++
-					s.onlineList = append(s.onlineList, serial)
+					// Write to online.txt immediately
+					if s.onlineFile != nil {
+						s.onlineFile.WriteString(serial + "\n")
+						s.onlineFile.Sync()
+					}
 					s.mu.Unlock()
 					onlineChan <- onlineResult{serial: serial, client: client}
 					ok = true
@@ -213,7 +227,12 @@ cleanup:
 	fmt.Println()
 
 	s.writePwnedFinished()
-	s.writeOnlineList()
+	
+	// Close online file
+	if s.onlineFile != nil {
+		s.onlineFile.Close()
+	}
+	
 	doneTimeStr := time.Now().Format("15:04:05")
 	fmt.Printf("\x1b[32m[%s] Done\x1b[0m\n", doneTimeStr)
 }
@@ -571,13 +590,18 @@ func formatVulnLabel(method string) string {
 
 func (s *Scanner) writeXMLFiles(serial string, res *ExploitResult) {
 	pwnedIdx := len(s.pwnedList) - 1
-	chunkSize := 64
+	chunkSize := 32
 	chunkIdx := pwnedIdx / chunkSize
 	xmlFilename := fmt.Sprintf("import_%d.xml", chunkIdx+1)
 	xmlPath := filepath.Join(s.OutDir, xmlFilename)
 
+	// Device name: {output-folder-name}-{s-no-starts-from-1}-{username:password}
+	outputFolderName := filepath.Base(s.OutDir)
+	deviceNum := (pwnedIdx % chunkSize) + 1
+	deviceName := fmt.Sprintf("%s-%d-%s:%s", outputFolderName, deviceNum, res.Login, res.Password)
+
 	encPass := FastEnc(res.Password)
-	row := BuildDeviceXMLRow(serial, res.Login, encPass)
+	row := BuildDeviceXMLRowWithName(serial, res.Login, encPass, deviceName)
 
 	if _, err := os.Stat(xmlPath); os.IsNotExist(err) {
 		var sb strings.Builder
@@ -624,22 +648,6 @@ func (s *Scanner) writePwnedFinished() {
 		line := fmt.Sprintf("\n# [%s] Scan finished\n", nowStr)
 		f.WriteString(line)
 		f.Close()
-	}
-}
-
-func (s *Scanner) writeOnlineList() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	onlineFile := filepath.Join(s.OutDir, "online.txt")
-	f, err := os.OpenFile(onlineFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	for _, serial := range s.onlineList {
-		f.WriteString(serial + "\n")
 	}
 }
 
