@@ -35,8 +35,10 @@ type Scanner struct {
 	snapshotWg  sync.WaitGroup
 	cancelOnce  sync.Once
 	pwnedList   []ExploitResult
+	onlineList  []string
 	cancelChan  chan struct{}
 	interrupted bool
+	startTime   time.Time
 }
 
 func NewScanner(targets []string, config *Config, threads int, outDir string, inputSource string) *Scanner {
@@ -47,6 +49,7 @@ func NewScanner(targets []string, config *Config, threads int, outDir string, in
 		OutDir:      outDir,
 		InputSource: inputSource,
 		cancelChan:  make(chan struct{}),
+		startTime:   time.Now(),
 	}
 }
 
@@ -160,6 +163,7 @@ func (s *Scanner) Run() {
 					}
 					s.mu.Lock()
 					s.OnlineCount++
+					s.onlineList = append(s.onlineList, serial)
 					s.mu.Unlock()
 					onlineChan <- onlineResult{serial: serial, client: client}
 					ok = true
@@ -209,6 +213,7 @@ cleanup:
 	fmt.Println()
 
 	s.writePwnedFinished()
+	s.writeOnlineList()
 	doneTimeStr := time.Now().Format("15:04:05")
 	fmt.Printf("\x1b[32m[%s] Done\x1b[0m\n", doneTimeStr)
 }
@@ -622,6 +627,22 @@ func (s *Scanner) writePwnedFinished() {
 	}
 }
 
+func (s *Scanner) writeOnlineList() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	onlineFile := filepath.Join(s.OutDir, "online.txt")
+	f, err := os.OpenFile(onlineFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	for _, serial := range s.onlineList {
+		f.WriteString(serial + "\n")
+	}
+}
+
 func (s *Scanner) printProgress() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -639,7 +660,28 @@ func (s *Scanner) printProgress() {
 		pctStr = fmt.Sprintf("%.1f%%", pct)
 	}
 
-	line := fmt.Sprintf("[%s] pwned > %d | online > %d | waste > %d",
-		pctStr, s.PwnedCount, s.OnlineCount, s.WasteCount)
+	elapsed := time.Since(s.startTime)
+	remaining := time.Duration(0)
+	if s.CompletedCount > 0 && s.TotalCount > 0 {
+		rate := float64(s.CompletedCount) / elapsed.Seconds()
+		if rate > 0 {
+			totalSeconds := float64(s.TotalCount) / rate
+			remainingMs := int64(totalSeconds*1000) - elapsed.Milliseconds()
+			if remainingMs > 0 {
+				remaining = time.Duration(remainingMs) * time.Millisecond
+			}
+		}
+	}
+
+	line := fmt.Sprintf("[%s] %s/%s pwned > %d | online > %d | waste > %d",
+		pctStr, formatDuration(elapsed), formatDuration(remaining), s.PwnedCount, s.OnlineCount, s.WasteCount)
 	fmt.Printf("\033[2K\r%s", line)
+}
+
+func formatDuration(d time.Duration) string {
+	d = d.Abs()
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	seconds := int(d.Seconds()) % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 }
