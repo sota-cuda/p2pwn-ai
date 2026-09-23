@@ -3,11 +3,20 @@
 *.tmp
 *.log
 
-# Generated files
-p2pwn_test
-sns.txt
-test_sn.txt
+# Environment files
+.env
+.env.local
+*.env.*
 
-# Date-stamped directories
-22-09-2026_*/
+# Backup/temporary files
+*~
+*.bak
+*.swp
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Directories for temporary data
+23-09-2026_06-39-49/
 ```
