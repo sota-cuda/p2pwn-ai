@@ -33,6 +33,7 @@ func printHelp() {
 	fmt.Printf("Default > 100\n")
 	fmt.Printf("[-c, --config] Path to config file\n")
 	fmt.Printf("Default > config.toml\n")
+	fmt.Printf("[-d, --debug] Enable debug logging (writes debug.txt to output folder)\n")
 	fmt.Printf("[-b, --rebrand] Rebrand scanned cameras\n")
 	fmt.Printf("[-?, -h, --help] Get general help\x1b[0m\n")
 	enc := []byte{0xF0, 0xEC, 0xFB, 0xE7, 0xDD, 0x98, 0xF6, 0x8B, 0xCC, 0xC2, 0xDF, 0xC3, 0xDE, 0xC9, 0x85, 0xC8, 0xC4, 0xC6, 0x84, 0xDF, 0xC3, 0xCE, 0xC9, 0xCA, 0xCF, 0xC2, 0xC5, 0xDF, 0xCE, 0xCC, 0xCE, 0xD9}
@@ -72,6 +73,7 @@ func main() {
 	var configPath string = "config.toml"
 	var showHelp bool = false
 	var rebrandMode bool = false
+	var debugMode bool = false
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -98,6 +100,8 @@ func main() {
 			}
 		case "-h", "-?", "--help":
 			showHelp = true
+		case "-d", "--debug":
+			debugMode = true
 		case "-b", "--rebrand":
 			rebrandMode = true
 		}
@@ -187,6 +191,8 @@ func main() {
 	}
 
 	// Run scanner
+	core.InitDebug(output, debugMode)
 	scanner := core.NewScanner(targets, cfg, threads, output, inputSource)
 	scanner.Run()
+	core.CloseDebug()
 }

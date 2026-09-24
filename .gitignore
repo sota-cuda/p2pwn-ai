@@ -1,13 +1,2 @@
-```
-# Temp files and logs
-*.tmp
-*.log
-
-# Generated files
-p2pwn_test
-sns.txt
-test_sn.txt
-
-# Date-stamped directories
-22-09-2026_*/
-```
+# Compiled/Binary files
+p2pwn
